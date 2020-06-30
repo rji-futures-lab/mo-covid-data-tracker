@@ -1,11 +1,25 @@
 from csv import DictReader, DictWriter
 from datetime import datetime
+import json
 import os
 import boto3
 import requests
 
 
-CSV_URL = 'https://opendata.arcgis.com/datasets/6f2a47a25872470a815bcd95f52c2872_0.csv'
+FEATURE_LAYER_URL = 'https://services6.arcgis.com/Bd4MACzvEukoZ9mR/arcgis/rest/services/county_MOHSIS_map/FeatureServer/0/query'
+PARAMS = {
+    'f': 'json',
+    'where': '1=1',
+    'returnGeometry': False,
+    'spatialRel': 'esriSpatialRelIntersects',
+    'outFields': '*',
+    'orderByFields': 'NAME2 asc',
+    'resultOffset': 0,
+    'resultRecordCount': 121,
+    'resultType': 'standard',
+    'cacheHint': True,
+}
+
 S3_CLIENT = boto3.client('s3')
 S3_BUCKET_NAME = 'mo-coviz-data'
 
@@ -16,7 +30,18 @@ class Pipe:
         self.value = self.value + text
 
 
-def write_csv_to_bucket(key, content):
+def get_feature_layer():
+    r = requests.get(FEATURE_LAYER_URL, params=PARAMS)
+    r.raise_for_status()
+
+    return r.json()
+
+
+def get_county_attributes(layer):
+    return [f['attributes'] for f in layer['features']]
+
+
+def write_to_s3(key, content):
     params = {
         'Bucket': S3_BUCKET_NAME,
         'ACL': 'public-read',
@@ -26,29 +51,17 @@ def write_csv_to_bucket(key, content):
     return S3_CLIENT.put_object(**params)
 
 
-def parse_response(r):
-    return DictReader([str(l) for l in r.iter_lines()])
-
-
-def clean_county_name(county_name):
-    if county_name == 'ST LOUIS':
+def edit_row(row):
+    if row['NAME'] == 'St. Louis' and row['TYPE'] == 'County':
         county_name = 'St. Louis County'
     else:
-        county_name = county_name.title() \
-            .replace('St ', 'St. ') \
-            .replace('Ste ', 'Ste. ')
+        county_name = row['NAME']
 
-    return county_name
-
-
-def slice_columns(data):
-    return [ 
-        {
-            'county': clean_county_name(d['MOHSISNAME']),
-            'cases': int(d['Cases']),
-            'deaths': int(d['Deaths']),
-        } for d in data
-    ]
+    return {
+        'county': county_name,
+        'cases': int(row['CASES']),
+        'deaths': int(row['DEATHS']),
+    }
 
 
 def combine_city_w_county(city_name, county_name, data):
@@ -65,7 +78,7 @@ def combine_city_w_county(city_name, county_name, data):
     return sorted(combined_data, key=lambda k: k['county'])
 
 
-def get_processed_csv(data):
+def to_csv(data):
     pipe = Pipe()
     headers = data[0].keys()
     writer = DictWriter(pipe, headers)
@@ -77,27 +90,25 @@ def get_processed_csv(data):
 
 
 def main():
-    r = requests.get(CSV_URL)
-    r.raise_for_status()
+    layer = get_feature_layer()
 
-    write_csv_to_bucket('raw/latest.csv', r.content)
-    # write the new source data to the s3 bucket (with timestamp)
+    write_to_s3('county_MOHSIS_map/layer/latest.json', json.dumps(layer))
 
-    raw_data = parse_response(r)
+    county_attributes = get_county_attributes(layer)
+    
+    full_csv = to_csv(county_attributes)
+    
+    write_to_s3('county_MOHSIS_map/county-attributes/latest.csv', full_csv)
 
-    sliced_data = slice_columns(raw_data)
+    county_edited_attributes = [edit_row(r) for r in county_attributes]
 
-    processed_data = combine_city_w_county(
-        'Kansas City', 'Jackson', sliced_data
-    )
-    processed_data = combine_city_w_county(
-        'Joplin', 'Jasper', processed_data
-    )
+    county_edited_attributes = combine_city_w_county('Kansas City', 'Jackson', county_edited_attributes)
+    
+    county_edited_attributes = combine_city_w_county('Joplin', 'Jasper', county_edited_attributes)
+    
+    edited_csv = to_csv(county_edited_attributes)
 
-    processed_csv = get_processed_csv(processed_data)
-
-    write_csv_to_bucket('processed/latest.csv', processed_csv)
-
+    write_to_s3('county_MOHSIS_map/county-attributes-edited/latest.csv', edited_csv)
 
 if __name__ == '__main__':
     main()
