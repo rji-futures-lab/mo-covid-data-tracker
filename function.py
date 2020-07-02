@@ -110,5 +110,10 @@ def main():
 
     write_to_s3('county_MOHSIS_map/county-attributes-edited/latest.csv', edited_csv)
 
+
+def lambda_handler(event, context):
+    return main()
+
+
 if __name__ == '__main__':
     main()

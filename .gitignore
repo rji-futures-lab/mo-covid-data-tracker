@@ -3,3 +3,7 @@ contacts.md
 .ipynb_checkpoints
 .DS_Store
 .python-version
+package/
+package.zip
+function.json
+event-rule.json
