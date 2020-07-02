@@ -57,10 +57,20 @@ def edit_row(row):
     else:
         county_name = row['NAME']
 
+    try:
+        cases = int(row['CASES'])
+    except TypeError:
+        cases = None
+
+    try:
+        deaths = int(row['DEATHS'])
+    except TypeError:
+        deaths = None        
+
     return {
         'county': county_name,
-        'cases': int(row['CASES']),
-        'deaths': int(row['DEATHS']),
+        'cases': cases,
+        'deaths': deaths,
     }
 
 
@@ -99,6 +109,9 @@ def main():
     full_csv = to_csv(county_attributes)
     
     write_to_s3('county_MOHSIS_map/county-attributes/latest.csv', full_csv)
+
+    for row in county_attributes:
+        print(edit_row(row))
 
     county_edited_attributes = [edit_row(r) for r in county_attributes]
 
