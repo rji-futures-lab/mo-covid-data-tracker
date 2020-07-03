@@ -1,5 +1,5 @@
 #!/bin/bash
-# schedule invocations of the lambda function
+# schedule invocations of lambda function
 
 aws events put-rule \
     --name mo-covid-archive-rule \
