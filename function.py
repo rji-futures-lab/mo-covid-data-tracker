@@ -52,7 +52,7 @@ def write_to_s3(key, content):
 
 
 def edit_row(row):
-    if row['NAME'] == 'St. Louis' and row['TYPE'] == 'County':
+    if row['NAME'] == 'St. Louis':
         county_name = 'St. Louis County'
     else:
         county_name = row['NAME']
