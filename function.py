@@ -103,15 +103,14 @@ def main():
     layer = get_feature_layer()
 
     write_to_s3('county_MOHSIS_map/layer/latest.json', json.dumps(layer))
+    write_to_s3(f'county_MOHSIS_map/layer/{datetime.now()}.json', json.dumps(layer))
 
     county_attributes = get_county_attributes(layer)
     
     full_csv = to_csv(county_attributes)
     
     write_to_s3('county_MOHSIS_map/county-attributes/latest.csv', full_csv)
-
-    for row in county_attributes:
-        print(edit_row(row))
+    write_to_s3(f'county_MOHSIS_map/county-attributes/{datetime.now()}.csv', full_csv)
 
     county_edited_attributes = [edit_row(r) for r in county_attributes]
 
